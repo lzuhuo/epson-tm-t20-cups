@@ -19,16 +19,13 @@ fi
 FILTER_DIR=$(cups-config --serverbin)/filter
 
 echo "📁 Instalando filtro em: $FILTER_DIR"
-sudo cp rastertozj "$FILTER_DIR/"
-sudo chmod 755 "$FILTER_DIR/rastertozj"
-sudo chown root:root "$FILTER_DIR/rastertozj"
+sudo cp rastertozj /usr/lib/cups/filter/
+sudo chmod +x /usr/lib/cups/filter/rastertozj
 
 # Instala o arquivo PPD
 echo ""
 echo "📄 Instalando arquivo PPD personalizado..."
-sudo mkdir -p /usr/share/ppd/custom/
-sudo cp tm20.ppd /usr/share/ppd/custom/
-sudo chmod 644 /usr/share/ppd/custom/tm20.ppd
+sudo cp tm20.ppd /usr/share/ppd/
 
 # Reinicia o CUPS
 echo ""
