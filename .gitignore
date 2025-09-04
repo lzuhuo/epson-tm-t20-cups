@@ -1,0 +1,6 @@
+# Make artifacts
+*.a
+*.so
+
+# Binário compilado
+rastertozj
