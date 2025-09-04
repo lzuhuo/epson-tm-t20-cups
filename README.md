@@ -1,22 +1,20 @@
-# Epson TM-T20II
+# Epson TM-T20II (CUPS Filter Modernizado)
 
-CUPS filter for thermal printer Epson TM-T20II
+Filtro CUPS para impressora térmica Epson TM-T20II, compatível com sistemas ARM como Raspberry Pi, Orange Pi e servidores Linux compactos.
 
-O driver oficial da Epson para Linux não funciona em sistemas ARM como o Raspberry Pi, pois é um binário compilado para arquitetura x86.
-
-Este projeto fornece um filtro CUPS (`rastertozj`) compatível com ARM, permitindo impressão térmica na Epson TM-T20II. Também otimiza o tratamento de linhas em branco para melhorar a performance.
+Este projeto substitui o driver oficial da Epson (que é x86 e incompatível com ARM) por um filtro em C que usa a API moderna do CUPS (`cupsCopyDestInfo`), compatível com CUPS 2.2+ e preparado para CUPS 3.x (sem suporte a PPDs).
 
 ---
 
 ## 🔧 Requisitos para Compilação
 
-Para compilar o filtro em Raspberry Pi ou qualquer sistema baseado em Debian/Ubuntu com arquitetura ARM, instale os pacotes necessários:
+Instale os pacotes necessários:
 
 ```bash
 sudo apt-get install libcups2-dev libcupsimage2-dev g++ cups cups-client
 ```
 
-Depois, compile o filtro:
+Compile o filtro:
 
 ```bash
 make
@@ -26,18 +24,14 @@ make
 
 ## 📁 Instalação Após a Compilação
 
-Após a compilação bem-sucedida, instale o binário e o arquivo `.ppd` manualmente:
+Instale o binário no diretório de filtros do CUPS:
 
 ```bash
 sudo cp rastertozj /usr/lib/cups/filter/
 sudo chmod +x /usr/lib/cups/filter/rastertozj
-
-sudo mkdir -p /usr/share/ppd/custom/
-sudo cp tm20.ppd /usr/share/ppd/custom/
-sudo chmod 644 /usr/share/ppd/custom/tm20.ppd
 ```
 
-Em alguns sistemas, o caminho do filtro pode ser `/usr/libexec/cups/filter/`. Verifique com:
+Verifique o caminho correto com:
 
 ```bash
 cups-config --serverbin
@@ -47,24 +41,17 @@ cups-config --serverbin
 
 ## 🖨️ Configuração no CUPS
 
-Para configurar a impressora:
-
-1. Acesse a interface web do CUPS:
+1. Acesse o painel do CUPS:
 
 ```
 http://localhost:631
 ```
 
-Ou substitua `localhost` pelo IP do Raspberry se estiver acessando remotamente.
-
 2. Vá em **Administration > Add Printer**
 
 3. Selecione sua impressora Epson TM-T20II (USB ou rede)
 
-4. Quando solicitado o driver:
-
-- Escolha **"Provide a PPD file manually"**
-- Selecione: `/usr/share/ppd/custom/tm20.ppd`
+4. Escolha um driver genérico (ex: Raw ou Generic ESC/POS)
 
 5. Nome sugerido para a impressora:
 
@@ -78,24 +65,21 @@ Epson_TM_T20II
 
 ## 🧪 Alternativa via Terminal
 
-Você também pode configurar a impressora diretamente pelo terminal:
+Você pode configurar a impressora diretamente:
 
 ```bash
-lpadmin -p Epson_TM_T20II -E -v usb://EPSON/TM-T20II -P /usr/share/ppd/custom/tm20.ppd
+lpadmin -p Epson_TM_T20II -E -v usb://EPSON/TM-T20II -m raw
 ```
 
-- `-p Epson_TM_T20II`: nome da impressora
-- `-E`: ativa a impressora
-- `-v`: caminho da impressora (verifique com `lpinfo -v`)
-- `-P`: caminho completo do arquivo `.ppd`
+> O filtro `rastertozj` será usado automaticamente se estiver instalado corretamente.
 
 ---
 
 ## ✅ Observações
 
-- Testado com sucesso em Raspberry Pi OS e Ubuntu Server ARM64.
-- Os avisos de funções obsoletas do CUPS durante a compilação podem ser ignorados — o filtro continua funcional.
-- Para impressão em rede ou integração com sistemas de PDV, configurações adicionais podem ser necessárias.
+- Este projeto **não depende de arquivos `.ppd`**
+- Compatível com CUPS moderno e preparado para ambientes sem suporte a PPDs
+- Ideal para sistemas embarcados, PDVs e automações com impressão térmica
 
 ---
 

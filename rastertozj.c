@@ -1,9 +1,10 @@
 #include <cups/cups.h>
-#include <cups/ppd.h>
 #include <cups/raster.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <string.h>
+#include <stdio.h>
 
 #define DEBUGFILE "/tmp/debugraster.txt"
 
@@ -20,15 +21,13 @@ struct command {
     char* command;
 };
 
-static const struct command printerInitializeCommand = {2,(char[2]){0x1b,0x40}};
+static const struct command printerInitializeCommand = {2, (char[2]){0x1b, 0x40}};
 static const struct command cashDrawerEject[2] = {
-    {5,(char[5]){0x1b,0x70,0,0x40,0x50}},
-    {5,(char[5]){0x1b,0x70,1,0x40,0x50}}
+    {5, (char[5]){0x1b, 0x70, 0, 0x40, 0x50}},
+    {5, (char[5]){0x1b, 0x70, 1, 0x40, 0x50}}
 };
-static const struct command rasterModeStartCommand = {4,(char[4]){0x1d,0x76,0x30,0}};
-static const struct command pageCutCommand = {4, (char[4]){29,'V','A',20}};
-
-FILE* lfd = 0;
+static const struct command rasterModeStartCommand = {4, (char[4]){0x1d, 0x76, 0x30, 0}};
+static const struct command pageCutCommand = {4, (char[4]){0x1d, 'V', 'A', 20}};
 
 void mputchar(char c) {
     putchar((unsigned char)c);
@@ -60,39 +59,52 @@ void skiplines(int size) {
     mputchar(size);
 }
 
-int getOptionChoiceIndex(const char * choiceName, ppd_file_t * ppd) {
-    ppd_choice_t * choice;
-    ppd_option_t * option;
-
-    choice = ppdFindMarkedChoice(ppd, choiceName);
-    if (choice == NULL) {
-        if ((option = ppdFindOption(ppd, choiceName)) == NULL) return -1;
-        if ((choice = ppdFindChoice(option, option->defchoice)) == NULL) return -1;
-    }
-    return atoi(choice->choice);
+int getOptionInt(const char *name, cups_dest_t *dest) {
+    const char *value = cupsGetOption(name, dest->num_options, dest->options);
+    return value ? atoi(value) : 0;
 }
 
-void initializeSettings(char * commandLineOptionSettings) {
-    ppd_file_t * ppd = NULL;
-    cups_option_t * options = NULL;
-    int numOptions = 0;
+void initializeSettings(char *job_options) {
+    cups_dest_t *dests, *dest = NULL;
+    cups_dinfo_t *info = NULL;
+    int num_dests = cupsGetDests(&dests);
 
-    ppd = ppdOpenFile(getenv("PPD"));
-    ppdMarkDefaults(ppd);
+    if (num_dests == 0 || dests == NULL) {
+        fputs("ERROR: No printer destinations found\n", stderr);
+        return;
+    }
 
-    numOptions = cupsParseOptions(commandLineOptionSettings, 0, &options);
-    if (numOptions != 0 && options != NULL) {
-        cupsMarkOptions(ppd, numOptions, options);
-        cupsFreeOptions(numOptions, options);
+    dest = cupsGetDest(NULL, NULL, num_dests, dests);
+    if (!dest) {
+        fputs("ERROR: No default printer found\n", stderr);
+        cupsFreeDests(num_dests, dests);
+        return;
+    }
+
+    info = cupsCopyDestInfo(CUPS_HTTP_DEFAULT, dest);
+    if (!info) {
+        fputs("ERROR: Unable to get printer info\n", stderr);
+        cupsFreeDests(num_dests, dests);
+        return;
+    }
+
+    cups_option_t *parsed_options = NULL;
+    int parsed_count = cupsParseOptions(job_options, 0, &parsed_options);
+
+    if (parsed_count > 0) {
+        dest->options = parsed_options;
+        dest->num_options = parsed_count;
     }
 
     memset(&settings, 0x00, sizeof(struct settings_));
-    settings.cashDrawer1 = getOptionChoiceIndex("CashDrawer1Setting", ppd);
-    settings.cashDrawer2 = getOptionChoiceIndex("CashDrawer2Setting", ppd);
-    settings.blankSpace  = getOptionChoiceIndex("BlankSpace", ppd);
-    settings.feedDist    = getOptionChoiceIndex("FeedDist", ppd);
+    settings.cashDrawer1 = getOptionInt("CashDrawer1Setting", dest);
+    settings.cashDrawer2 = getOptionInt("CashDrawer2Setting", dest);
+    settings.blankSpace  = getOptionInt("BlankSpace", dest);
+    settings.feedDist    = getOptionInt("FeedDist", dest);
 
-    ppdClose(ppd);
+    cupsFreeDestInfo(info);
+    cupsFreeDests(num_dests, dests);
+    if (parsed_options) cupsFreeOptions(parsed_count, parsed_options);
 }
 
 void jobSetup() {
@@ -112,11 +124,12 @@ void ShutDown() {
     outputCommand(printerInitializeCommand);
 }
 
-__sighandler_t old_signal;
+void (*old_signal)(int);
+
 void EndPage() {
     for (int i = 0; i < settings.feedDist; ++i)
         skiplines(0x18);
-    signal(15, old_signal);
+    signal(SIGTERM, old_signal);
 }
 
 void cancelJob(int foo) {
@@ -127,7 +140,7 @@ void cancelJob(int foo) {
 }
 
 void pageSetup() {
-    old_signal = signal(15, cancelJob);
+    old_signal = signal(SIGTERM, cancelJob);
 }
 
 int main(int argc, char *argv[]) {
@@ -147,8 +160,7 @@ int main(int argc, char *argv[]) {
 
     if (argc == 7) {
         if ((fd = open(argv[6], O_RDONLY)) == -1) {
-            perror("ERROR: Unable to open raster file - ");
-            sleep(1);
+            perror("ERROR: Unable to open raster file");
             return EXIT_FAILURE;
         }
     } else {
@@ -178,9 +190,9 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "PAGE: %d %d\n", ++page, header.NumCopies);
         pageSetup();
 
-        int foo = (header.cupsWidth > 0x240) ? 0x240 : header.cupsWidth;
-        foo = (foo + 7) & 0xFFFFFFF8;
-        int width_size = foo >> 3;
+        int adjustedWidth = (header.cupsWidth > 0x240) ? 0x240 : header.cupsWidth;
+        adjustedWidth = (adjustedWidth + 7) & 0xFFFFFFF8;
+        int width_size = adjustedWidth >> 3;
 
         y = 0;
         int zeroy = 0;
