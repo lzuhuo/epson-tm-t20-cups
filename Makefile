@@ -1,17 +1,28 @@
-CC=gcc
-RM=rm -f
-CFLAGS=-Wl,-rpath,/usr/lib -Wall -fPIC -O3
-LDFLAGS=
-LDLIBS=-lcupsimage -lcups
+# Compilador e flags
+CC       = gcc
+CFLAGS   = -Wall -O3 -fPIC `cups-config --cflags`
+LDFLAGS  = 
+LDLIBS   = `cups-config --libs` -lcupsimage -lcups
 
-SRCS=rastertozj.c
-OBJS=$(subst .c,.o,$(SRCS))
+# Fontes e objetos
+SRCS     = rastertozj.c
+OBJS     = $(SRCS:.c=.o)
 
+# Alvo padrão
 all: rastertozj
 
+# Linkagem final
 rastertozj: $(OBJS)
-	gcc $(LDFLAGS) -o rastertozj rastertozj.o $(LDLIBS)
+    $(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-rastertozj.o: rastertozj.c
-	gcc $(CFLAGS) -c rastertozj.c
+# Compilação dos objetos
+%.o: %.c
+    $(CC) $(CFLAGS) -c $< -o $@
 
+# Limpeza
+clean:
+    $(RM) $(OBJS) rastertozj
+
+# Instalação
+install:
+    ./install.sh
