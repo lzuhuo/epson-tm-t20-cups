@@ -4,6 +4,11 @@ echo ""
 echo "🛠️  Instalando filtro Epson TM-T20II"
 echo "------------------------------------"
 
+
+sudo apt-get install libcups2-dev libcupsimage2-dev g++ cups cups-client -y
+
+make
+
 # Verifica se o binário existe
 if [ ! -f rastertozj ]; then
     echo "❌ Erro: binário 'rastertozj' não encontrado. Compile com 'make' antes de instalar."
