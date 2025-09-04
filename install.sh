@@ -15,6 +15,8 @@ echo "⚙️  Compilando o filtro rastertozj..."
 make clean
 make
 
+./install
+
 if [ ! -f rastertozj ]; then
     echo "❌ Erro: binário rastertozj não foi gerado. Verifique o código-fonte."
     exit 1
